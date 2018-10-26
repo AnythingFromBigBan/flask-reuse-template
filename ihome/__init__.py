@@ -60,4 +60,8 @@ def create_app(config_type):
     # 配置日志
     setup_log()
 
+    # import *语法不能在函数/方法中使用
+    # from info.models import *
+    import ihome.models
+
     return app
