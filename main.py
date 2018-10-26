@@ -12,11 +12,5 @@ mgr = Manager(app)
 mgr.add_command("mc", MigrateCommand)
 
 
-@app.route('/')
-def index():
-    session["age"] = 20
-    return "index"
-
-
 if __name__ == '__main__':
     mgr.run()

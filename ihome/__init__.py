@@ -5,6 +5,7 @@ from flask_sqlalchemy import SQLAlchemy
 from redis import StrictRedis
 
 from config import config_dict
+from ihome.modules.html import html_blu
 
 
 # 定义函数 封装应用的创建和配置  工厂函数(调用者提供生产物料, 函数内部封装创建过程)
@@ -27,4 +28,6 @@ def create_app(config_type):
     # 初始化迁移器
     Migrate(app, db)
 
+    # 3. 注册蓝图
+    app.register_blueprint(html_blu)
     return app
