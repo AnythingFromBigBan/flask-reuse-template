@@ -1,6 +1,6 @@
 import datetime
 
-from flask import current_app, jsonify, request, g
+from flask import current_app, jsonify, request, g, session
 from ihome import sr, db
 from ihome.models import Area, House, Facility, HouseImage, Order
 from ihome.modules.api import api_blu
@@ -222,6 +222,42 @@ def save_new_house():
         return jsonify(errno=RET.DBERR, errmsg="数据保存错误")
 
     return jsonify(errno=RET.OK, errmsg="ok", data={"house_id": house.id})
+
+
+# 房屋详情
+@api_blu.route('/houses/<int:house_id>')
+def get_house_detail(house_id):
+    """
+    1. 通过房屋id查询出房屋模型
+    :param house_id:
+    :return:
+    """
+    user_id = session.get("user_id", -1)
+
+    # 先从 redis 中查询
+    try:
+        house_dict = sr.get("house_info_%d" % house_id)
+        if house_dict:
+            return jsonify(errno=RET.OK, errmsg="OK", data={"user_id": user_id, "house": eval(house_dict)})
+    except Exception as e:
+        current_app.logger.error(e)
+
+    # 如果redis中没有查询到
+    try:
+        house = House.query.get(house_id)
+    except Exception as e:
+        current_app.logger.error(e)
+        return jsonify(errno=RET.DBERR, errmsg="房屋信息查询失败")
+    if not house:
+        return jsonify(errno=RET.NODATA, errmsg="房屋信息不存在")
+
+    # 将数据缓存到redis中
+    house_dict = house.to_full_dict()
+    try:
+        sr.set(("house_info_%d" % house_id), house_dict, constants.HOUSE_DETAIL_REDIS_EXPIRE_SECOND)
+    except Exception as e:
+        current_app.logger.error(e)
+    return jsonify(errno=RET.OK, errmsg="OK", data={"user_id": user_id, "house": house_dict})
 
 
 
