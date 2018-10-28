@@ -260,4 +260,39 @@ def get_house_detail(house_id):
     return jsonify(errno=RET.OK, errmsg="OK", data={"user_id": user_id, "house": house_dict})
 
 
+# 获取首页展示内容
+@api_blu.route('/houses/index')
+def house_index():
+    """
+    获取首页房屋列表
+    :return:
+    """
+
+    # 先从redis中取
+    try:
+        houses_dict = sr.get("home_page_house_info")
+    except Exception as e:
+        houses_dict = None
+        current_app.logger.error(e)
+    if houses_dict:
+        return jsonify(errno=RET.OK, errmsg="OK", data=eval(houses_dict))
+
+    # 查询房屋信息
+    try:
+        houses = House.query.order_by(House.order_count.desc()).limit(constants.HOME_PAGE_MAX_HOUSES).all()
+    except Exception as e:
+        current_app.logger.error(e)
+        return jsonify(errno=RET.DBERR, errmsg="查询数据错误")
+
+    houses_dict = []
+    for house in houses:
+        houses_dict.append(house.to_basic_dict())
+
+    # 将数据缓存到redis中
+    try:
+        sr.set("home_page_house_info", houses_dict, constants.HOME_PAGE_DATA_REDIS_EXPIRES)
+    except Exception as e:
+        current_app.logger.error(e)
+
+    return jsonify(errno=RET.OK, errmsg="OK", data=houses_dict)
 
