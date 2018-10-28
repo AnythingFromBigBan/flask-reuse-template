@@ -29,6 +29,18 @@ class User(BaseModel, db.Model):
     houses = db.relationship("House", backref="user")  # 用户发布的房屋
     orders = db.relationship("Order", backref="user")  # 用户下的订单
 
+    @property  # 将 password方法提升成一个属性，而所修饰的方法会在获取passowrd的值的时候被调用
+    def password(self):
+        raise AttributeError("当前属性不可读")
+
+    # 修饰指定名字属性的set方法，当 password 被设置值的时候就会被调用，并且会把设置的值做为参数传入
+    @password.setter
+    def password(self, value):
+        self.password_hash = generate_password_hash(value)
+
+    def check_passowrd(self, password):
+        return check_password_hash(self.password_hash, password)
+
 
 class Area(BaseModel, db.Model):
     """城区"""
