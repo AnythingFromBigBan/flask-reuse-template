@@ -1,13 +1,19 @@
-from ihome import sr
-from ihome.modules.html import html_blu
-import logging  # python内置的日志模块  将日志信息在控制台中输出, 并且可以将日志保存到文件中
-# flask中的默认日志也是集成的logging模块, 但是没有将日志保存到文件中
 from flask import current_app
+from ihome.modules.html import html_blu
 
 
-# 2.使用蓝图注册路由
+# 访问静态文件
+@html_blu.route('/<path:file_name>')
+def get_html_file(file_name):
+
+    # 判断是否是网站的Logo，如果不是，添加前缀
+    if file_name != "favicon.ico":
+        file_name = "html/" + file_name
+
+    return current_app.send_static_file(file_name)
+
+
+# 根路由
 @html_blu.route('/')
 def index():
-    # logging.error("出现了一个错误")  # logging默认的输出不包含错误位置, 显示效果不好, 可以使用flask内置的日志输出语法来代替
-    current_app.logger.error("出现了一个错误")
-    return "index"
+    return current_app.send_static_file("html/index.html")
