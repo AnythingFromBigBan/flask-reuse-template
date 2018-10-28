@@ -234,3 +234,17 @@ def check_login():
     name = session.get("name")
     # 直接返回
     return jsonify(errno=RET.OK, errmsg="OK", data={"user_id": user_id,"name": name})
+
+
+# 退出登录
+@api_blu.route("/session", methods=["DELETE"])
+def logout():
+    """
+    1. 清除session中的对应登录之后保存的信息
+    :return:
+    """
+    session.pop('user_id', None)
+    session.pop('mobile', None)
+    session.pop('name', None)
+
+    return jsonify(errno=RET.OK, errmsg="OK")
