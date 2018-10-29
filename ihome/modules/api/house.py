@@ -296,3 +296,32 @@ def house_index():
 
     return jsonify(errno=RET.OK, errmsg="OK", data=houses_dict)
 
+
+# 搜索房屋/获取房屋列表
+@api_blu.route('/houses')
+def get_house_list():
+
+    # 获取所有的参数
+    args = request.args
+    area_id = args.get('aid', '')
+    start_date_str = args.get('sd', '')
+    end_date_str = args.get('ed', '')
+    # booking(订单量), price-inc(低到高), price-des(高到低),
+    sort_key = args.get('sk', 'new')
+    page = args.get('p', '1')
+
+    # 查询数据
+    house_query = House.query
+
+    # 进行分页
+    paginate = house_query.paginate(int(page), constants.HOUSE_LIST_PAGE_CAPACITY, False)
+    # 取到当前页数据
+    houses = paginate.items
+    # 取到总页数
+    total_page = paginate.pages
+    # 将查询结果转成字符串
+    houses_dict = []
+    for house in houses:
+        houses_dict.append(house.to_basic_dict())
+
+    return jsonify(errno=RET.OK, errmsg='请求成功', data={"total_page": total_page, "houses": houses_dict})
