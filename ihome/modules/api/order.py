@@ -130,3 +130,65 @@ def get_orders():
         orders_dict_li.append(order.to_dict())
 
     return jsonify(errno=RET.OK, errmsg="OK", data={"orders": orders_dict_li})
+
+
+# 接受/拒绝订单
+@api_blu.route('/orders', methods=["PUT"])
+@login_required
+def change_order_status():
+    """
+    1. 接受参数：order_id
+    2. 通过order_id找到指定的订单，(条件：status="待接单")
+    3. 修改订单状态
+    4. 保存到数据库
+    5. 返回
+    :return:
+    """
+    user_id = g.user_id
+    data_json = request.json
+    # 取到订单号
+    order_id = data_json.get("order_id")
+    action = data_json.get("action")
+
+    if not all([order_id, action]):
+        return jsonify(errno=RET.PARAMERR, errmsg="参数错误")
+
+    # accept / reject
+    if action not in ("accept", "reject"):
+        return jsonify(errno=RET.PARAMERR, errmsg="参数错误")
+
+    # 2. 查询订单
+    try:
+        order = Order.query.filter(Order.id == order_id, Order.status == "WAIT_ACCEPT").first()
+    except Exception as e:
+        current_app.logger.error(e)
+        return jsonify(errno=RET.DBERR, errmsg="数据查询错误")
+
+    if not order:
+        return jsonify(errno=RET.NODATA, errmsg="未查询到订单")
+
+    # 查询当前订单的房东是否是当前登录用户，如果不是，不允许操作
+    if user_id != order.house.user_id:
+        return jsonify(errno=RET.ROLEERR, errmsg="不允许操作")
+
+    # 3 更改订单的状态
+    if "accept" == action:
+        # 接单
+        order.status = "WAIT_COMMENT"
+    elif "reject" == action:
+        order.status = "REJECTED"
+        # 取出原因
+        reason = data_json.get("reason")
+        if not reason:
+            return jsonify(errno=RET.PARAMERR, errmsg="请填写拒单原因")
+        # 保存拒单原因
+        order.comment = reason
+
+    try:
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(e)
+        return jsonify(errno=RET.DBERR, errmsg="保存数据失败")
+
+    return jsonify(errno=RET.OK, errmsg="OK")
