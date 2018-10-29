@@ -1,6 +1,6 @@
 import datetime
 
-from ihome import db
+from ihome import db, sr
 from ihome.models import House, Order
 from ihome.utils.common import login_required
 from ihome.utils.response_code import RET
@@ -192,3 +192,54 @@ def change_order_status():
         return jsonify(errno=RET.DBERR, errmsg="保存数据失败")
 
     return jsonify(errno=RET.OK, errmsg="OK")
+
+
+# 评论订单
+@api_blu.route('/orders/comment', methods=["PUT"])
+@login_required
+def order_comment():
+    """
+    订单评价
+    1. 获取参数
+    2. 校验参数
+    3. 修改模型
+    :return:
+    """
+
+    # 1. 获取参数
+    data_json = request.json
+    order_id = data_json.get("order_id")
+    comment = data_json.get("comment")
+
+    # 2. 2. 校验参数
+    if not all([order_id, comment]):
+        return jsonify(errno=RET.PARAMERR, errmsg="参数错误")
+
+    try:
+        order = Order.query.filter(Order.id == order_id, Order.status == "WAIT_COMMENT").first()
+    except Exception as e:
+        current_app.logger.error(e)
+        return jsonify(errno=RET.DBERR, errmsg="查询数据错误")
+
+    if not order:
+        return jsonify(errno=RET.NODATA, errmsg="该订单不存在")
+
+    # 3. 修改模型并且保存到数据库
+    order.comment = comment
+    order.status = "COMPLETE"
+
+    try:
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(e)
+        return jsonify(errno=RET.DBERR, errmsg="保存数据失败")
+
+    # 删除房屋详情信息缓存
+    try:
+        sr.delete("house_detail_%d" % order.house_id)
+    except Exception as e:
+        current_app.logger.error(e)
+
+    # 4. 返回结果
+    return jsonify(errno=RET.OK, errmsg="ok")
