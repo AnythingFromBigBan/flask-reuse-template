@@ -89,3 +89,44 @@ def add_order():
         return jsonify(errno=RET.DBERR, errmsg="生成订单失败")
     # 7. 返回下单结果
     return jsonify(errno=RET.OK, errmsg="OK", data={"order_id": order.id})
+
+
+# 获取我的订单
+@api_blu.route('/orders')
+@login_required
+def get_orders():
+    """
+    1. 去订单的表中查询当前登录用户下的订单
+    2. 返回数据
+    :return:
+    """
+    user_id = g.user_id
+    # 取当前角色的标识：房客：custom,房东：landlord
+    role = request.args.get("role")
+
+    if not role:
+        return jsonify(errno=RET.PARAMERR, errmsg="参数错误")
+    # 判断 role 是否是指定的值
+    if role not in("custom", "landlord"):
+        return jsonify(errno=RET.PARAMERR, errmsg="参数错误")
+
+    try:
+        if "custom" == role:  # 房客订单查询
+            orders = Order.query.filter(Order.user_id == user_id).order_by(Order.create_time.desc()).all()
+        elif "landlord" == role:  # 房东订单查询
+            # 1. 先查出当前登录用户的所有的房屋, House
+            houses = House.query.filter(House.user_id == user_id).all()
+            # 2. 取到所有的房屋id
+            houses_ids = [house.id for house in houses]
+            # 3. 从订单表中查询出房屋id在第2步取出来的列表中的房屋
+            orders = Order.query.filter(Order.house_id.in_(houses_ids)).order_by(Order.create_time.desc()).all()
+    except Exception as e:
+        current_app.logger.error(e)
+        return jsonify(errno=RET.DBERR, errmsg="数据查询错误")
+
+    orders_dict_li = []
+
+    for order in orders:
+        orders_dict_li.append(order.to_dict())
+
+    return jsonify(errno=RET.OK, errmsg="OK", data={"orders": orders_dict_li})
