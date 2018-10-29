@@ -300,7 +300,6 @@ def house_index():
 # 搜索房屋/获取房屋列表
 @api_blu.route('/houses')
 def get_house_list():
-
     # 获取所有的参数
     args = request.args
     area_id = args.get('aid', '')
@@ -310,8 +309,72 @@ def get_house_list():
     sort_key = args.get('sk', 'new')
     page = args.get('p', '1')
 
+    try:
+        page = int(page)
+    except Exception as e:
+        current_app.logger.error(e)
+        return jsonify(errno=RET.PARAMERR, errmsg="参数错误")
+
+    # 日期转换
+    try:
+        start_date = None
+        end_date = None
+        if start_date_str:
+            start_date = datetime.datetime.strptime(start_date_str, '%Y-%m-%d')
+        if end_date_str:
+            end_date = datetime.datetime.strptime(end_date_str, '%Y-%m-%d')
+        # 如果开始时间大于或者等于结束时间，就报错
+        if start_date and end_date:
+            assert start_date < end_date, Exception("开始时间大于结束时间")
+    except Exception as e:
+        current_app.logger.error(e)
+        return jsonify(errno=RET.PARAMERR, errmsg="参数错误")
+
+    # 从缓存中取出房屋列表
+    try:
+        redis_key = "houses_%s_%s_%s_%s" % (start_date_str, end_date_str, area_id, sort_key)
+        response_data = sr.hget(redis_key, page)
+        if response_data:
+            return jsonify(errno=RET.OK, errmsg="OK", data=eval(response_data))
+    except Exception as e:
+        current_app.logger.error(e)
+
     # 查询数据
     house_query = House.query
+
+    filters = []
+    # 判断是否传入城区id
+    if area_id:
+        filters.append(House.area_id == area_id)
+
+    # 过滤已预订的房屋
+    conflict_order = None
+    try:
+        if start_date and end_date:
+            conflict_order = Order.query.filter(Order.begin_date <= end_date, Order.end_date >= start_date).all()
+        elif start_date:
+            conflict_order = Order.query.filter(Order.end_date >= start_date).all()
+        elif end_date:
+            conflict_order = Order.query.filter(Order.begin_date <= end_date).all()
+    except Exception as e:
+        current_app.logger.error(e)
+        return jsonify(errno=RET.DBERR, errmsg="查询数据错误")
+
+    if conflict_order:
+        # 取到冲突订单的房屋id
+        conflict_house_id = [order.house_id for order in conflict_order]
+        # 添加条件：查询出房屋不包括冲突订单中的房屋id
+        filters.append(House.id.notin_(conflict_house_id))
+
+    # 根据筛选条件进行排序
+    if sort_key == "booking":
+        house_query = house_query.filter(*filters).order_by(House.order_count.desc())
+    elif sort_key == "price-inc":
+        house_query = house_query.filter(*filters).order_by(House.price.asc())
+    elif sort_key == "price-des":
+        house_query = house_query.filter(*filters).order_by(House.price.desc())
+    else:
+        house_query = house_query.filter(*filters).order_by(House.create_time.desc())
 
     # 进行分页
     paginate = house_query.paginate(int(page), constants.HOUSE_LIST_PAGE_CAPACITY, False)
@@ -324,4 +387,20 @@ def get_house_list():
     for house in houses:
         houses_dict.append(house.to_basic_dict())
 
-    return jsonify(errno=RET.OK, errmsg='请求成功', data={"total_page": total_page, "houses": houses_dict})
+    response_data = {"total_page": total_page, "houses": houses_dict}
+    try:
+        redis_key = "houses_%s_%s_%s_%s" % (start_date_str, end_date_str, area_id, sort_key)
+        # 创建redis管道, 支持多命令事务
+        pipe = sr.pipeline()
+        # 开启事务
+        pipe.multi()
+        # 设置数据
+        pipe.hset(redis_key, page, response_data)
+        # 设置过期时间
+        pipe.expire(redis_key, constants.HOUSE_LIST_REDIS_EXPIRES)
+        # 提交事务
+        pipe.execute()
+    except Exception as e:
+        current_app.logger.error(e)
+
+    return jsonify(errno=RET.OK, errmsg='请求成功', data=response_data)
