@@ -1,7 +1,7 @@
 ﻿
 # 1.创建虚拟环境
 
-  mkvirtualenv -p python3 HMHome
+  mkvirtualenv -p python3 flask-demo
 
 
 # 2.安装依赖库
